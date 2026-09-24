@@ -1,0 +1,16 @@
+{
+  "listenAddress": "127.0.0.1",
+  "port": 8787,
+  "sampleIntervalSeconds": 2,
+  "historyIntervalSeconds": 10,
+  "retentionDays": 7,
+  "alertCooldownSeconds": 300,
+  "thresholds": {
+    "cpuUsage": { "warning": 90, "critical": 97, "sustainSeconds": 60 },
+    "memoryUsage": { "warning": 85, "critical": 95, "sustainSeconds": 30 },
+    "diskFreePercent": { "warning": 10, "critical": 5, "sustainSeconds": 0 },
+    "cpuTemperature": { "warning": 85, "critical": 95, "sustainSeconds": 30 },
+    "gpuTemperature": { "warning": 83, "critical": 90, "sustainSeconds": 30 },
+    "sustainedCpu": { "averagePercent": 75, "windowMinutes": 15 }
+  }
+}

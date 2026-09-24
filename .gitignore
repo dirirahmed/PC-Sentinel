@@ -1,0 +1,36 @@
+# Binaries and build output
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+
+# Frontend
+node_modules
+web/dist/*
+!web/dist/.gitkeep
+*.tsbuildinfo
+
+# Local data: history databases and machine-specific config
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+/config.json
+/data/
+pcsentinel-data/
+
+# Secrets
+.env
+.env.*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
