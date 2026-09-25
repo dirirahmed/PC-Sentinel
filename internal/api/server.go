@@ -43,6 +43,7 @@ type Server struct {
 	boot   config.Config // settings the HTTP listener was started with
 	static fs.FS
 	log    *slog.Logger
+	ai     Assistant // optional (V2); nil or disabled when no API key is set
 }
 
 // New creates the API server. static may be nil (API-only mode).
@@ -58,7 +59,7 @@ var ranges = map[string]time.Duration{
 	"1h": time.Hour, "6h": 6 * time.Hour, "24h": 24 * time.Hour, "7d": 7 * 24 * time.Hour,
 }
 
-const processNote = "Read-only view. Terminating or modifying processes is intentionally not supported in V1."
+const processNote = "Read-only view. Terminating or modifying processes is intentionally not supported."
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -74,6 +75,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/alerts", s.handleAlerts)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
+	mux.HandleFunc("GET /api/analysis", s.handleAnalysis)
+	mux.HandleFunc("POST /api/ai/ask", s.handleAsk)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "unknown endpoint")
 	})

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const ROUTES = ["dashboard", "performance", "processes", "alerts", "settings"] as const;
+export const ROUTES = ["dashboard", "performance", "analysis", "processes", "alerts", "settings"] as const;
 export type Route = (typeof ROUTES)[number];
 
 export function parseRoute(hash: string): Route {
@@ -8,7 +8,7 @@ export function parseRoute(hash: string): Route {
   return (ROUTES as readonly string[]).includes(name) ? (name as Route) : "dashboard";
 }
 
-/** Five pages don't justify a router dependency; the URL hash is enough. */
+/** A handful of pages doesn't justify a router dependency; the URL hash is enough. */
 export function useHashRoute(): Route {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   useEffect(() => {

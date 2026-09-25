@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
@@ -200,6 +201,11 @@ func TestIsLoopback(t *testing.T) {
 }
 
 func TestFilterPartitions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// On Windows isLocalDrive queries GetDriveType, which rejects these
+		// Linux-style mountpoints before the filtering rules under test run.
+		t.Skip("fixture uses Linux-style mountpoints")
+	}
 	parts := []disk.PartitionStat{
 		{Mountpoint: "/", Device: "/dev/sda1", Fstype: "ext4", Opts: []string{"rw"}},
 		{Mountpoint: "/home", Device: "/dev/sda1", Fstype: "ext4", Opts: []string{"rw"}}, // bind mount
@@ -279,8 +285,10 @@ func TestCollectOnThisMachine(t *testing.T) {
 			t.Errorf("missing collector status %q", n)
 		}
 	}
-	if s.CollectionMillis <= 0 {
-		t.Error("collection duration not recorded")
+	// Windows' monotonic clock ticks every 0.5-15.6 ms, so a fast pass can
+	// legitimately measure 0 there; it must never be negative.
+	if s.CollectionMillis < 0 || (runtime.GOOS != "windows" && s.CollectionMillis == 0) {
+		t.Errorf("collection duration not recorded: %v", s.CollectionMillis)
 	}
 }
 

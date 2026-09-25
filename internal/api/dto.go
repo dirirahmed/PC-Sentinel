@@ -3,6 +3,7 @@ package api
 import (
 	"time"
 
+	"github.com/dirirahmed/pc-sentinel/internal/ai"
 	"github.com/dirirahmed/pc-sentinel/internal/analyzer"
 	"github.com/dirirahmed/pc-sentinel/internal/config"
 	"github.com/dirirahmed/pc-sentinel/internal/models"
@@ -75,6 +76,35 @@ type AlertsResponse struct {
 type SettingsResponse struct {
 	Config          config.Config `json:"config"`
 	RestartRequired []string      `json:"restartRequired,omitempty"`
+}
+
+// AnalysisResponse is GET /api/analysis (V2).
+type AnalysisResponse struct {
+	Analysis analyzer.PerformanceReport `json:"analysis"`
+	AI       AIStatus                   `json:"ai"`
+}
+
+// AIStatus tells the UI whether Ask Sentinel is available. It never includes
+// the API key.
+type AIStatus struct {
+	Enabled bool   `json:"enabled"`
+	Model   string `json:"model,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// AskRequest is the body of POST /api/ai/ask. History holds earlier turns of
+// the conversation (oldest first); the server trims and validates it.
+type AskRequest struct {
+	Question string    `json:"question"`
+	History  []ai.Turn `json:"history,omitempty"`
+}
+
+type AskResponse struct {
+	Answer      string    `json:"answer"`
+	Model       string    `json:"model"`
+	GeneratedAt time.Time `json:"generatedAt"`
+	// Analysis is the data the answer was based on.
+	Analysis analyzer.PerformanceReport `json:"analysis"`
 }
 
 type errorResponse struct {

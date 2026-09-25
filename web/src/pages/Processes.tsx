@@ -41,7 +41,7 @@ export function Processes() {
   return (
     <div className="page">
       <Banner tone="info">
-        Read-only view. Ending or changing processes is intentionally not part of V1. CPU is shown as a share of the whole machine (100% =
+        Read-only view. Ending or changing processes is intentionally not supported. CPU is shown as a share of the whole machine (100% =
         every core busy), like Task Manager.
       </Banner>
       {error && <Banner tone="warning">{error}</Banner>}

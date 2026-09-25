@@ -2,9 +2,9 @@
 
 PC Sentinel is a local system-health and performance monitor for Windows. A small Go agent collects CPU, memory, GPU, disk, network and process telemetry, scores system health with transparent rules, raises threshold-based alerts, and serves a React dashboard at `http://127.0.0.1:8787`. It gives you one clear view of your PC without juggling Task Manager, Resource Monitor and command-line tools.
 
-> **V1 does not use AI.** There are no LLMs, cloud AI APIs or machine-learning models. All analysis is based on locally collected telemetry and fixed, documented rules.
+> **V2 adds performance analysis and an optional AI assistant.** The analysis is local and rule-based, like everything in V1. The assistant ("Ask Sentinel") uses the Anthropic API, is **off unless you set an API key**, and only sends data when you ask it a question. PC Sentinel works fully without it.
 >
-> **Telemetry stays on your PC.** The agent listens only on `127.0.0.1`, makes no outbound network requests and has no cloud component. Nothing leaves the machine unless you later choose to export or share it yourself.
+> **Telemetry stays on your PC by default.** The agent listens only on `127.0.0.1` and, unless Ask Sentinel is enabled and used, makes no outbound network requests. See [Privacy](#privacy) for exactly what a question sends.
 
 ![Dashboard](docs/screenshots/dashboard-dark-1440.png)
 
@@ -27,11 +27,14 @@ _The screenshots are real output, captured on a Linux development VM (2 vCPU, no
 
 ## Contents
 
+- [What's new in V2](#whats-new-in-v2)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Technology stack](#technology-stack)
 - [How telemetry is collected](#how-telemetry-is-collected)
 - [How health scoring works](#how-health-scoring-works)
+- [Performance analysis (V2)](#performance-analysis-v2)
+- [Ask Sentinel: AI assistant (V2)](#ask-sentinel-ai-assistant-v2)
 - [Alerts](#alerts)
 - [History and retention](#history-and-retention)
 - [API overview](#api-overview)
@@ -45,6 +48,17 @@ _The screenshots are real output, captured on a Linux development VM (2 vCPU, no
 - [Privacy](#privacy)
 - [Roadmap](#roadmap)
 
+## What's new in V2
+
+V1 monitors the PC. V2 also **explains** what the data means:
+
+- **Performance analysis.** A small deterministic layer reads the last 5 minutes of V1 telemetry plus the current process list and reports concrete findings: sustained high CPU, high memory, a program using unusually much CPU or memory, high disk activity, high GPU usage, low disk space, and a possible CPU bottleneck (CPU near its limit while the GPU has headroom). Each finding has a severity, the measured evidence, a short explanation and a suggested action.
+- **Analysis page.** A new page in the dashboard with a performance summary, the detected issues, practical recommendations, and the Ask Sentinel chat.
+- **Ask Sentinel (optional).** Ask questions such as *"Why is my PC slow?"*, *"Is my PC CPU or GPU limited?"* or *"What should I fix first?"*. The assistant receives PC Sentinel's structured findings and telemetry and explains them in plain language. It is told to use only that data and never to claim something was detected when it wasn't.
+- **Two new endpoints:** `GET /api/analysis` and `POST /api/ai/ask`.
+
+Still deliberately out of scope: automatic optimisation, process termination, registry, startup-app or power-plan changes, and anything that modifies the system. PC Sentinel remains read-only.
+
 ## Features
 
 - **Dashboard.** Overall health score with per-category breakdown, active alerts, live tiles for CPU, memory, GPU, network and disk with 5-minute sparklines, per-core CPU load, drive capacity with low-space warnings, GPU adapter details, uptime, and the agent's own footprint.
@@ -53,9 +67,10 @@ _The screenshots are real output, captured on a Linux development VM (2 vCPU, no
 - **GPU.** A vendor-neutral path on Windows: adapter name, vendor, utilization, per-engine utilization (3D, Copy, Video Decode, …), and dedicated memory used and total. Temperature comes from `nvidia-smi` when it is installed; otherwise it shows as unavailable.
 - **Disks.** Every local drive's capacity, used, free and percent, read/write throughput, and warning/critical badges when free space runs low. SSD health/SMART is **not** reported.
 - **Network.** Download and upload rates, cumulative totals, and history. Only interface byte counters are read; packets are never inspected.
-- **Processes.** Name, PID, CPU %, memory, executable path (when accessible) and status, with sorting and search. Read-only: terminating processes is deliberately **not** part of V1.
+- **Processes.** Name, PID, CPU %, memory, executable path (when accessible) and status, with sorting and search. Read-only: terminating processes is deliberately **not** supported.
 - **Performance page.** Historical charts for CPU, memory, GPU, temperatures, network, disk I/O and drive fill level over 5m / 15m / 30m / 1h / 6h / 24h / 7d, with average and peak for the selected range and a hover crosshair and tooltip.
 - **Alerts.** Deterministic rules with sustain periods, hysteresis and cooldowns, shown with severity, timestamp, component and reason, plus stored alert history.
+- **Analysis (V2).** Rule-based findings with evidence, explanations and recommendations, plus the optional Ask Sentinel assistant. See [Performance analysis](#performance-analysis-v2).
 - **Settings.** Refresh interval, history resolution and retention, alert cooldown, all thresholds, and theme (dark / light / system), editable in the UI and saved to a JSON config file.
 - **Single binary.** The built frontend is embedded in the Go executable with `go:embed`.
 
@@ -70,11 +85,13 @@ _The screenshots are real output, captured on a Linux development VM (2 vCPU, no
             │  monitor/    loop · 30-min in-memory ring · 10 s averaging buckets      │
             │      │                 │                        │                       │
             │      ▼                 ▼                        ▼                       │
-            │  analyzer/  health score + alert engine    storage/  SQLite (history,   │
+            │  analyzer/  health · alerts · analysis     storage/  SQLite (history,   │
             │                                                      disk usage, alerts)│
             │      │                                                                  │
             │      ▼                                                                  │
             │  api/        JSON over HTTP on 127.0.0.1:8787  +  embedded web/dist     │
+            │      │                                                                  │
+            │      └─▶ ai/  (optional) Anthropic Messages API, only on "Ask Sentinel"  │
             └──────┼──────────────────────────────────────────────────────────────────┘
                    ▼
             React + TypeScript dashboard (polls the API; pauses while the tab is hidden)
@@ -84,7 +101,8 @@ _The screenshots are real output, captured on a Linux development VM (2 vCPU, no
 cmd/pcsentinel/        entry point: flags, wiring, graceful shutdown
 internal/
   collector/           telemetry sources; *_windows.go holds PDH, DXGI and drive-type code
-  analyzer/            health scoring, alert state machine, series summaries
+  analyzer/            health scoring, alert state machine, series summaries, performance analysis (V2)
+  ai/                  optional Anthropic API client for Ask Sentinel (V2), isolated from monitoring
   monitor/             collection loop, live ring buffer, downsampling, self-measurement
   storage/             SQLite schema, queries, retention pruning
   api/                 HTTP handlers and response types (dto.go)
@@ -92,7 +110,7 @@ internal/
   config/              config file load/validate/save
 web/
   src/components/      charts (hand-written SVG), tiles, panels, status pills
-  src/pages/           Dashboard, Performance, Processes, Alerts, Settings
+  src/pages/           Dashboard, Performance, Analysis, Processes, Alerts, Settings
   src/hooks/           polling, hash routing, theme
   src/services/        typed API client
   src/types/           API response types
@@ -112,6 +130,7 @@ Design notes:
 | Layer | Choice | Why |
 | --- | --- | --- |
 | Agent | Go 1.24, standard library `net/http`, `log/slog`, `embed` | Small static binary, low overhead |
+| AI (optional, V2) | Anthropic Messages API over plain `net/http` | No SDK dependency; isolated in `internal/ai` |
 | System metrics | [gopsutil v4](https://github.com/shirou/gopsutil) | Mature, cross-platform CPU/memory/disk/network/process access |
 | Windows specifics | `golang.org/x/sys/windows` calling PDH (`pdh.dll`) and DXGI (`dxgi.dll`) directly | Vendor-neutral GPU data without cgo or vendor SDKs |
 | Storage | SQLite via [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3) | Pure Go (WebAssembly build of SQLite), so no C compiler or DLL is needed on Windows |
@@ -158,6 +177,68 @@ Each category gets a score from 0 to 100 from a simple piecewise-linear rule: fu
 - The score always comes with a one-line explanation naming the main factor, e.g. *"CPU is the main factor: 5-minute average utilization 97% (full score at ≤50%)."*
 
 These are rules of thumb for a typical desktop. The score is a quick summary of *load and headroom right now*, **not** a precise or scientific measure of hardware health, and it says nothing about component wear or failure risk.
+
+## Performance analysis (V2)
+
+`internal/analyzer/performance.go` runs on request (`GET /api/analysis`, and before every Ask Sentinel question). It uses data PC Sentinel already has: the in-memory history for the last 5 minutes, the latest snapshot, and the process list. There is no machine learning or statistical modelling, only the thresholds below.
+
+| Finding | Rule (defaults) | Severity |
+| --- | --- | --- |
+| Sustained high CPU usage | 5-minute CPU average ≥ 85 % / ≥ 95 % | warning / critical |
+| High memory usage | 5-minute memory average ≥ 85 % / ≥ 95 % | warning / critical |
+| Program using a lot of CPU | One program (processes with the same name combined) ≥ 25 % / ≥ 50 % of the whole machine, at the time of analysis | warning / critical |
+| Program using a lot of memory | One program ≥ 20 % / ≥ 35 % of RAM | warning / critical |
+| High disk activity | 5-minute read + write average ≥ 50 MB/s / ≥ 200 MB/s | info / warning |
+| High GPU usage | 5-minute GPU average ≥ 85 % / ≥ 97 % (normal while gaming, so never critical) | info / warning |
+| Possible CPU bottleneck | CPU average ≥ 80 %, GPU average between 15 % and 60 %, and CPU at least 25 points above GPU | warning |
+| Low free space | Drive free space at or below the configured disk thresholds (10 % / 5 %) | warning / critical |
+
+- Each finding carries: **issue** (title), **severity**, **explanation**, **evidence** quoting the measured values (for example *"CPU averaged 91% over the last 5 minutes while GPU usage averaged 48%."*), and a **suggested action**. Recommendations are de-duplicated and ordered by severity.
+- The overall status is the highest finding severity, `ok` when nothing is found, or `collecting` when there isn't enough history yet.
+- **Nothing is guessed.** The sustained checks only run once there is at least 1 minute of history. If GPU utilization, disk counters or the process list aren't available, the related checks are skipped and a note says why.
+- The Windows *System Idle Process* is ignored (its "CPU use" is idle time). Programs split across many processes, like browsers, are judged as one program.
+- The bottleneck rule needs some GPU activity: an idle GPU has no work to be starved of, so a CPU-only job such as compiling shows as high CPU, not as a bottleneck.
+- Process CPU is a point-in-time reading (the same one the Processes page shows), so a program that is just starting up can briefly appear.
+
+## Ask Sentinel: AI assistant (V2)
+
+Ask Sentinel explains the analysis in plain language and answers follow-up questions. It is optional and isolated: the code lives in `internal/ai`, nothing in the collectors, monitor or analyzer depends on it, and it runs only when you ask a question.
+
+**How it works.** When you ask a question, the agent runs a fresh analysis and sends the Anthropic API one request containing a system prompt, your question, up to 8 earlier turns of the conversation, and a JSON block with:
+
+- the analysis report (findings, 5-minute averages and peaks, notes about skipped checks);
+- the health score and active alerts;
+- basic hardware and current usage (OS version, CPU model and cores, RAM size, GPU names and usage, drive letters, sizes and free space);
+- the top 5 programs by CPU and by memory (names and usage only).
+
+The system prompt tells the model to base every statement on that data, quote the actual numbers, say when something wasn't measured, only report issues that appear in the findings or alerts, and never recommend registry edits, "optimizer" tools or disabling security software. Hostname, file paths and user names are never sent.
+
+**Configure the API key.** The key is read from an environment variable on the machine running the agent. It is never written to disk by PC Sentinel, never logged and never sent to the browser.
+
+```powershell
+# PowerShell, current session only
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+.\bin\pcsentinel.exe
+
+# Or persist it for your user account (open a new terminal afterwards)
+setx ANTHROPIC_API_KEY "sk-ant-..."
+```
+
+Optional variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | *(unset: assistant off)* | Enables Ask Sentinel |
+| `PCSENTINEL_AI_MODEL` | `claude-sonnet-5` | Model to use, e.g. `claude-haiku-4-5` for lower cost |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Send requests through an API gateway or proxy instead |
+
+At startup the log says either `Ask Sentinel enabled model=...` or `Ask Sentinel disabled`.
+
+**Use it.** Open **Analysis** in the dashboard, then click a suggested question or type your own (Enter sends, Shift+Enter adds a new line). Without a key, the chat area explains how to enable it and the rest of the page works as normal.
+
+**Without AI.** Monitoring, health scoring, alerts, history and the full performance analysis are all local and work the same with or without an API key. Only the chat box needs it.
+
+Each question is a paid API call on your Anthropic account. Answers typically take a few seconds.
 
 ## Alerts
 
@@ -210,6 +291,8 @@ All endpoints are `GET` unless noted, return JSON, and are served only on the lo
 | `/api/alerts?limit=200` | Active alerts (from memory) + stored history |
 | `/api/settings` | Current configuration |
 | `PUT /api/settings` | Update configuration (partial JSON is merged; validated; persisted) |
+| `/api/analysis` | V2: performance analysis (status, summary, findings, recommendations, notes, 5-minute metrics) and whether Ask Sentinel is enabled |
+| `POST /api/ai/ask` | V2: `{"question": "...", "history": [{"role": "user"\|"assistant", "content": "..."}]}` → `{"answer", "model", "generatedAt", "analysis"}`. Returns `503` when no API key is configured, `502`/`504` for upstream errors or timeouts |
 
 Ranges: `5m`, `15m`, `30m`, `1h`, `6h`, `24h`, `7d`. Before the first sample completes, telemetry endpoints return `503`. If the history database is unavailable, long ranges return `503` while live endpoints keep working.
 
@@ -237,7 +320,8 @@ Security hardening, since any web page can try to reach `localhost`:
 - The agent binds to `127.0.0.1` by default.
 - Requests whose `Host` header isn't a loopback name are rejected, which blocks DNS-rebinding pages.
 - CORS is not enabled.
-- `PUT /api/settings` requires `Content-Type: application/json`, which a cross-site form can't send.
+- `PUT /api/settings` and `POST /api/ai/ask` require `Content-Type: application/json`, which a cross-site form can't send.
+- The Anthropic API key stays in the agent's environment. No endpoint returns it.
 - Responses carry a strict CSP and `nosniff`.
 
 ## Configuration
@@ -325,7 +409,10 @@ What the tests cover:
 - **monitor:** snapshot publication, alert persistence, downsampling arithmetic, continued monitoring during storage failures and recovery, live-only operation without a database, ring-buffer trimming, and window-coverage rules.
 - **api** (`httptest`): 503 before the first sample, JSON shape and `null` for unavailable data, range summaries, graceful degradation when history fails, bad ranges and limits, settings validation and partial updates, restart-required reporting, rejection of foreign `Host` headers, the SPA fallback and asset caching.
 - **config:** defaults, partial files, invalid values, threshold ordering, atomic persistence, and example-file parity.
-- **frontend** (Vitest): formatting (including `null` → "Unavailable"), process filtering and sorting (unmeasured CPU always last), chart math (nice axis maxima in decimal and binary units, gaps in lines, nearest-point hover), status-tone mapping and hash routing.
+- **analysis (V2):** CPU and memory detection at each severity boundary, the 1-minute coverage rule, per-program CPU and memory detection with same-name grouping and the idle process excluded, the CPU/GPU bottleneck rule and its exclusions (busy, idle or unmeasured GPU), disk activity and free space, severity ordering and recommendation de-duplication.
+- **ai (V2)** (fake Anthropic server via `httptest`): disabled without a key, environment configuration, request headers and body (system prompt, conversation, findings in the data block), answer parsing, error mapping (401, 429, 529, non-JSON), truncated and empty answers, timeouts, and that the key never appears in errors.
+- **api, V2 endpoints:** `/api/analysis` built from series data, graceful degradation without history or processes, AI status reporting, `/api/ai/ask` disabled / success / validation / history sanitising / upstream errors, and that the hostname never reaches the model.
+- **frontend** (Vitest): formatting (including `null` → "Unavailable"), process filtering and sorting (unmeasured CPU always last), chart math (nice axis maxima in decimal and binary units, gaps in lines, nearest-point hover), status-tone mapping and hash routing; V2 analysis status tones, metric rows (unavailable stays "Unavailable"), question validation and chat-history building.
 
 ## Performance of the agent itself
 
@@ -371,7 +458,9 @@ Design choices that keep overhead low:
 - **CPU temperature on Windows** is usually unavailable or approximate. The only built-in source is ACPI thermal zones, which often need admin rights and often measure the motherboard rather than the CPU die. Accurate readings need a kernel driver (as used by LibreHardwareMonitor); V1 deliberately avoids shipping one.
 - **No SSD/HDD health (SMART).** Only capacity and throughput are reported.
 - **Process status** isn't exposed by the Windows API used, so it shows "—" there. Protected processes may show no path or CPU value without elevation.
-- **No process termination** or any other system modification in V1.
+- **No process termination** or any other system modification, in V1 or V2.
+- **Analysis thresholds are fixed** rules of thumb and are not yet configurable in Settings. Process CPU findings are point-in-time readings.
+- **Ask Sentinel** depends on an external service and its answers come from a language model: they are grounded in PC Sentinel's data but can still be imperfect. Treat them as explanations, not guarantees.
 - Per-process GPU, disk and network usage aren't shown.
 - History averages hide spikes shorter than the bucket, except for CPU and GPU, which keep bucket peaks. Memory peak for long ranges is the peak of the bucket averages.
 - Single user and single machine. Binding to a non-loopback address is possible, but there is no authentication, so it isn't recommended.
@@ -379,12 +468,13 @@ Design choices that keep overhead low:
 
 ## Privacy
 
-- All telemetry is collected, analysed and stored locally. There is no telemetry upload, no analytics, no update check and no AI service.
+- All telemetry is collected, analysed and stored locally. There is no telemetry upload, no analytics and no update check.
+- **Ask Sentinel is the only feature that sends data off the machine**, and only when an API key is set *and* you ask a question. Each question sends the data listed in [Ask Sentinel](#ask-sentinel-ai-assistant-v2) to the Anthropic API. The hostname, file paths and the history database are never sent. Leave `ANTHROPIC_API_KEY` unset to keep PC Sentinel fully offline.
 - The API is loopback-only by default, with host-header checks.
 - Network monitoring reads per-interface byte counters only. It never captures or inspects packets, connections, hostnames or URLs.
 - The history database holds numeric metrics, drive mount points and alert records. Process names and paths appear live in the UI but are never persisted.
 - Deleting `%APPDATA%\PCSentinel` removes all stored data.
-- If a future version adds any off-device feature, it will be opt-in and clearly labelled. V1 has none.
+- Any off-device feature is opt-in and clearly labelled. In V2 that is Ask Sentinel alone.
 
 ## Roadmap
 
@@ -394,4 +484,4 @@ Design choices that keep overhead low:
 - Export history to CSV and a "compare two time ranges" view.
 - Run as a background service or tray app with Windows toast notifications for critical alerts.
 - An installer (MSIX or WinGet manifest).
-- Later, and strictly opt-in: optional recommendations built on top of the deterministic rules, possibly AI-assisted. V1 intentionally ships without any of this.
+- Make the V2 analysis thresholds configurable in Settings.

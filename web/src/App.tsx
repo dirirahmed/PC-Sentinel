@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
-import { IconAlerts, IconDashboard, IconPerformance, IconProcesses, IconSettings, Logo } from "./components/icons";
+import { IconAlerts, IconAnalysis, IconDashboard, IconPerformance, IconProcesses, IconSettings, Logo } from "./components/icons";
 import { Banner } from "./components/ui";
 import { useHashRoute, type Route } from "./hooks/useHashRoute";
 import { usePolling } from "./hooks/usePolling";
@@ -7,6 +7,7 @@ import { useTheme } from "./hooks/useTheme";
 import { formatBytes, formatDuration } from "./lib/format";
 import { gradeLabel, gradeTone } from "./lib/status";
 import { Alerts } from "./pages/Alerts";
+import { Analysis } from "./pages/Analysis";
 import { Dashboard } from "./pages/Dashboard";
 import { Performance } from "./pages/Performance";
 import { Processes } from "./pages/Processes";
@@ -17,6 +18,7 @@ import type { Config } from "./types/api";
 const NAV: { route: Route; label: string; Icon: ComponentType }[] = [
   { route: "dashboard", label: "Dashboard", Icon: IconDashboard },
   { route: "performance", label: "Performance", Icon: IconPerformance },
+  { route: "analysis", label: "Analysis", Icon: IconAnalysis },
   { route: "processes", label: "Processes", Icon: IconProcesses },
   { route: "alerts", label: "Alerts", Icon: IconAlerts },
   { route: "settings", label: "Settings", Icon: IconSettings },
@@ -108,6 +110,7 @@ export function App() {
         {route === "dashboard" &&
           (sys ? <Dashboard system={sys} /> : !system.error && <p className="muted page">Collecting the first sample…</p>)}
         {route === "performance" && <Performance intervalMs={intervalMs} />}
+        {route === "analysis" && <Analysis />}
         {route === "processes" && <Processes />}
         {route === "alerts" && <Alerts />}
         {route === "settings" && <Settings theme={theme} setTheme={setTheme} onSaved={onSaved} />}

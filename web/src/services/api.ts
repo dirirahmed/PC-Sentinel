@@ -1,4 +1,15 @@
-import type { AlertsResponse, Config, MetricsResponse, ProcessesResponse, RangeKey, SettingsResponse, SystemResponse } from "../types/api";
+import type {
+  AlertsResponse,
+  AnalysisResponse,
+  AskResponse,
+  ChatTurn,
+  Config,
+  MetricsResponse,
+  ProcessesResponse,
+  RangeKey,
+  SettingsResponse,
+  SystemResponse,
+} from "../types/api";
 
 class ApiError extends Error {
   constructor(
@@ -11,10 +22,12 @@ class ApiError extends Error {
 }
 
 const TIMEOUT_MS = 10_000;
+// AI answers come from a remote model and can take much longer than telemetry.
+const AI_TIMEOUT_MS = 100_000;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(path, { ...init, signal: controller.signal });
@@ -44,4 +57,15 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
     }),
+  analysis: () => request<AnalysisResponse>("/api/analysis"),
+  ask: (question: string, history: ChatTurn[]) =>
+    request<AskResponse>(
+      "/api/ai/ask",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, history }),
+      },
+      AI_TIMEOUT_MS,
+    ),
 };

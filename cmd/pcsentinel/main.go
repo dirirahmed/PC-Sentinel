@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dirirahmed/pc-sentinel/internal/ai"
 	"github.com/dirirahmed/pc-sentinel/internal/api"
 	"github.com/dirirahmed/pc-sentinel/internal/collector"
 	"github.com/dirirahmed/pc-sentinel/internal/config"
@@ -93,8 +94,16 @@ func run() error {
 	if !bundled {
 		log.Warn("frontend not bundled; API only (run `npm run build` in web/ before `go build` to embed it)")
 	}
+	// Ask Sentinel (V2) is optional: without an API key it stays off and
+	// monitoring is unaffected. The key is only read here, never logged.
+	assistant := ai.New(ai.ConfigFromEnv())
+	if assistant.Enabled() {
+		log.Info("Ask Sentinel enabled", "model", assistant.Model())
+	} else {
+		log.Info("Ask Sentinel disabled; set " + ai.EnvAPIKey + " to enable it")
+	}
 	srv := &http.Server{
-		Handler:           api.New(mon, cfgStore, static, log).Handler(),
+		Handler:           api.New(mon, cfgStore, static, log).WithAssistant(assistant).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

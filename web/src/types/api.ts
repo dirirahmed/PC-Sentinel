@@ -253,5 +253,59 @@ export interface SettingsResponse {
   restartRequired?: string[];
 }
 
+// ---- V2: performance analysis and Ask Sentinel ----
+
+export type AnalysisStatus = "ok" | "collecting" | Severity;
+
+export interface Finding {
+  id: string;
+  rule: string;
+  category: "cpu" | "memory" | "gpu" | "disk" | "process";
+  target?: string;
+  severity: Severity;
+  title: string;
+  explanation: string;
+  evidence: string;
+  value: number;
+  threshold: number;
+  unit: string;
+  recommendation: string;
+}
+
+export interface PerformanceReport {
+  generatedAt: string;
+  status: AnalysisStatus;
+  summary: string;
+  windowSeconds: number;
+  samples: number;
+  metrics: SeriesSummary;
+  findings: Finding[];
+  recommendations: string[];
+  notes: string[];
+}
+
+export interface AIStatus {
+  enabled: boolean;
+  model?: string;
+  reason?: string;
+}
+
+export interface AnalysisResponse {
+  analysis: PerformanceReport;
+  ai: AIStatus;
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  model: string;
+  generatedAt: string;
+  analysis: PerformanceReport;
+}
+
 export const RANGES = ["5m", "15m", "30m", "1h", "6h", "24h", "7d"] as const;
 export type RangeKey = (typeof RANGES)[number];

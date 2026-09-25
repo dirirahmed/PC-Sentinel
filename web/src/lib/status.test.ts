@@ -22,6 +22,7 @@ describe("parseRoute", () => {
   it("parses hash routes and falls back to the dashboard", () => {
     expect(parseRoute("#/processes")).toBe("processes");
     expect(parseRoute("#alerts")).toBe("alerts");
+    expect(parseRoute("#/analysis")).toBe("analysis");
     expect(parseRoute("")).toBe("dashboard");
     expect(parseRoute("#/nope")).toBe("dashboard");
   });
