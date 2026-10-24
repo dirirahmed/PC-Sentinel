@@ -57,6 +57,10 @@ V1 monitors the PC. V2 also **explains** what the data means:
 - **Ask Sentinel (optional).** Ask questions such as *"Why is my PC slow?"*, *"Is my PC CPU or GPU limited?"* or *"What should I fix first?"*. The assistant receives PC Sentinel's structured findings and telemetry and explains them in plain language. It is told to use only that data and never to claim something was detected when it wasn't.
 - **Two new endpoints:** `GET /api/analysis` and `POST /api/ai/ask`.
 
+![Analysis page](docs/screenshots/analysis-dark-1440.png)
+
+_The Analysis page under a two-process CPU load on the Linux dev VM. Both findings quote the measured values, and the GPU checks are listed as skipped because the VM has no GPU. Ask Sentinel shows its "off" state because no API key was set._
+
 Still deliberately out of scope: automatic optimisation, process termination, registry, startup-app or power-plan changes, and anything that modifies the system. PC Sentinel remains read-only.
 
 ## Features
